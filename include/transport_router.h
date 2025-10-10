@@ -26,9 +26,10 @@ class TransportRouter
                                                                    const tc::Stop *stop_to) const;
     const graph::DirectedWeightedGraph<double> &GetRouteGraph() const;
 
+    void BuildGraph(const TransportCatalogue &catalogue);
+
   private:
     void AddEdgesGraph(const TransportCatalogue &catalogue);
-    void BuildGraph(const TransportCatalogue &catalogue);
 
     graph::DirectedWeightedGraph<double> graph_;
     std::unique_ptr<graph::Router<double>> router_;
