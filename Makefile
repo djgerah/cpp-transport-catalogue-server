@@ -19,6 +19,9 @@ $(TARGET): $(OBJS)
 all: $(TARGET)
 	./$(TARGET)
 
+run:
+	./$(TARGET)
+
 clean:
 	rm -rf $(OBJ_DIR)
 
