@@ -140,18 +140,9 @@ make run
 ## Зависимости
 
 * C++17
-* [C++ REST SDK](https://github.com/microsoft/cpprestsdk) — HTTP сервер 
+* [cpp-httplib](https://github.com/yhirose/cpp-httplib) — HTTP сервер
 * Встроенный JSON-парсер
 * SVG-рендер для визуализации карты
-
----
-
-## Примечание
-
-* Все запросы выполняются в формате application/json.
-* Для GET /map возвращается image/svg+xml.
-* После POST /load можно безопасно выполнять PUT, PATCH и POST /query.
-* Взаимодействие протестировано через Postman.
 
 ---
 

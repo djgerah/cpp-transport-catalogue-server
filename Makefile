@@ -7,19 +7,18 @@ SRCS = $(wildcard $(SRC_DIR)/*.cpp)
 OBJS = $(patsubst $(SRC_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(SRCS))
 TARGET = $(OBJ_DIR)/$(BIN)
 
+all: run
+
+$(TARGET): $(OBJS)
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp | $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(OBJ_DIR):
 	mkdir -p $(OBJ_DIR)
 
-$(TARGET): $(OBJS)
-	$(CXX) $(CXXFLAGS) $^ -lcpprest -lboost_system -lssl -lcrypto -lpthread -o $@
-
-all: $(TARGET)
-	./$(TARGET)
-
-run:
+run: $(TARGET)
 	./$(TARGET)
 
 clean:
@@ -30,4 +29,4 @@ clang-format:
 
 rebuild: clean all
 
-.PHONY: all run clean rebuild clang-format
+.PHONY: all run clean rebuild format
