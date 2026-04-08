@@ -5,7 +5,7 @@ SRC_DIR = src
 OBJ_DIR = build
 SRCS = $(wildcard $(SRC_DIR)/*.cpp)
 OBJS = $(patsubst $(SRC_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(SRCS))
-TARGET = $(OBJ_DIR)/$(BIN)
+TARGET = $(BIN)
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp | $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
@@ -17,13 +17,12 @@ $(TARGET): $(OBJS)
 	$(CXX) $(CXXFLAGS) $^ -lcpprest -lboost_system -lssl -lcrypto -lpthread -o $@
 
 all: $(TARGET)
-	./$(TARGET)
 
-run:
+run: $(TARGET)
 	./$(TARGET)
 
 clean:
-	rm -rf $(OBJ_DIR)
+	rm -rf $(OBJ_DIR) $(TARGET)
 
 clang-format:
 	find $(SRC_DIR) include -type f \( -name "*.cpp" -o -name "*.h" \) -exec clang-format -style=Microsoft -i {} +
