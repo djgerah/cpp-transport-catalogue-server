@@ -60,10 +60,12 @@ int main()
                                   U("application/json"));
                         return;
                     }
+
                     auto j = task.get();
                     std::stringstream ss;
                     ss << j.serialize();
                     json::Document doc = json::Load(ss);
+
                     const auto &base_requests = doc.GetRoot().AsDict().at("base_requests").AsArray();
                     for (const auto &r : base_requests)
                         json_reader->ParseRequest(r);
@@ -79,62 +81,78 @@ int main()
 
     // --- PATCH /bus ---
     web::http::experimental::listener::http_listener patch_listener(U("http://localhost:8080/bus"));
-    patch_listener.support(web::http::methods::PATCH, [&](web::http::http_request req) mutable {
-        req.extract_json().then([req = std::move(req), &catalogue](pplx::task<web::json::value> task) mutable {
-            try
-            {
-                auto j = task.get();
-                std::stringstream ss;
-                ss << j.serialize();
-                json::Document doc = json::Load(ss);
-                const auto &base_requests = doc.GetRoot().AsDict().at("base_requests").AsArray();
-                for (const auto &r : base_requests)
+    patch_listener.support(web::http::methods::PATCH, [&](web::http::http_request request) mutable {
+        request.extract_json().then(
+            [request = std::move(request), &catalogue, &router](pplx::task<web::json::value> task) mutable {
+                try
                 {
-                    const auto &dict = r.AsDict();
-                    auto bus_name = dict.at("name").AsString();
-                    auto bus = catalogue.GetBus(bus_name);
-                    if (!bus)
+                    web::json::value result = task.get();
+                    std::stringstream ss;
+                    ss << result.serialize();
+                    json::Document doc = json::Load(ss);
+
+                    const auto &base_requests = doc.GetRoot().AsDict().at("base_requests").AsArray();
+
+                    for (const auto &r : base_requests)
                     {
-                        req.reply(web::http::status_codes::NotFound, "{\"error\":\"bus not found\"}",
-                                  U("application/json"));
-                        return;
+                        const auto &dict = r.AsDict();
+                        auto bus_name = dict.at("name").AsString();
+                        auto bus = catalogue.GetBus(bus_name);
+
+                        if (!bus)
+                        {
+                            request.reply(web::http::status_codes::NotFound, "{\"error\":\"bus not found\"}",
+                                          U("application/json"));
+                            return;
+                        }
+
+                        if (dict.count("stops"))
+                        {
+                            size_t pos = dict.count("position") ? static_cast<size_t>(dict.at("position").AsInt()) : 0;
+                            const auto &stops = dict.at("stops").AsArray();
+                            for (size_t i = 0; i < stops.size(); ++i)
+                                catalogue.UpdateBusStops(bus_name, stops[i].AsString(), pos + i);
+                        }
+
+                        if (dict.count("is_roundtrip"))
+                            bus->is_roundtrip = dict.at("is_roundtrip").AsBool();
                     }
-                    if (dict.count("stops"))
-                    {
-                        size_t pos = dict.count("position") ? static_cast<size_t>(dict.at("position").AsInt()) : 0;
-                        const auto &stops = dict.at("stops").AsArray();
-                        for (size_t i = 0; i < stops.size(); ++i)
-                            catalogue.UpdateBusStops(bus_name, stops[i].AsString(), pos + i);
-                    }
-                    if (dict.count("is_roundtrip"))
-                        bus->is_roundtrip = dict.at("is_roundtrip").AsBool();
+
+                    router->BuildGraph(catalogue);
+
+                    request.reply(web::http::status_codes::OK, "{\"status\":\"bus updated\"}", U("application/json"));
                 }
-                req.reply(web::http::status_codes::OK, "{\"status\":\"bus updated\"}", U("application/json"));
-            }
-            catch (const std::exception &e)
-            {
-                req.reply(web::http::status_codes::InternalError, e.what());
-            }
-        });
+                catch (const std::exception &e)
+                {
+                    request.reply(web::http::status_codes::InternalError, e.what());
+                }
+            });
     });
 
     // --- POST /query ---
     web::http::experimental::listener::http_listener query_listener(U("http://localhost:8080/query"));
     query_listener.support(web::http::methods::POST, [&](web::http::http_request request) mutable {
         request.extract_json().then([request = std::move(request), &catalogue, &json_reader,
-                                 &request_handler](pplx::task<web::json::value> task) mutable {
+                                     &request_handler](pplx::task<web::json::value> task) mutable {
             try
             {
                 if (!request_handler || !json_reader)
                 {
                     request.reply(web::http::status_codes::BadRequest, "{\"error\":\"catalogue not loaded\"}",
-                              U("application/json"));
+                                  U("application/json"));
                     return;
                 }
-                auto j = task.get();
 
+                web::json::value result = task.get();
+                std::stringstream ss;
+                ss << result.serialize();
+
+                std::istringstream input(ss.str());
                 std::ostringstream output;
-                json_reader->ProcessRequests(json_reader->GetStatRequests(), catalogue, *request_handler, output);
+
+                json_reader::JsonReader doc(input);
+                doc.ProcessRequests(doc.GetStatRequests(), catalogue, *request_handler, output);
+
                 request.reply(web::http::status_codes::OK, output.str(), U("application/json"));
             }
             catch (const std::exception &e)
@@ -152,7 +170,7 @@ int main()
             if (!renderer || !json_reader)
             {
                 request.reply(web::http::status_codes::BadRequest, "{\"error\":\"catalogue not loaded\"}",
-                          U("application/json"));
+                              U("application/json"));
                 return;
             }
 
@@ -178,7 +196,7 @@ int main()
         map_listener.open().wait();
         std::cout << "Server running at http://localhost:8080\n";
         std::string dummy;
-        std::getline(std::cin, dummy); // wait until Enter
+        std::getline(std::cin, dummy);
     }
     catch (const std::exception &e)
     {
