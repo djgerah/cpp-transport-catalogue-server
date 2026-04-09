@@ -1,9 +1,9 @@
 #include "../include/json_reader.h"
-
 #include <cpprest/http_listener.h>
 #include <cpprest/http_msg.h>
 #include <cpprest/json.h>
 #include <iostream>
+#include <memory>
 
 int main()
 {
@@ -13,174 +13,130 @@ int main()
     std::unique_ptr<RequestHandler> request_handler;
     std::unique_ptr<json_reader::JsonReader> json_reader;
 
-    // --- Load endpoint ---
-    web::http::experimental::listener::http_listener listener(U("http://localhost:8080"));
-    listener.support([&](web::http::http_request request) {
-        auto path = web::uri::decode(request.relative_uri().path());
-        auto method = request.method();
-
-        if (method == web::http::methods::POST && path == U("/load"))
-        {
-            request.extract_json().then([&](pplx::task<web::json::value> task) {
-                try
-                {
-                    web::json::value j = task.get();
-                    std::stringstream ss;
-                    ss << j.serialize();
-
-                    json_reader = std::make_unique<json_reader::JsonReader>(ss);
-                    json_reader->FillTransportCatalogue(catalogue);
-
-                    renderer::RenderSettings render_settings =
-                        json_reader->FillRenderSettings(json_reader->GetRenderSettings());
-                    renderer = std::make_unique<renderer::MapRenderer>(render_settings);
-
-                    tc::RoutingSettings routing_settings =
-                        json_reader->FillRoutingSettings(json_reader->GetRoutingSettings());
-                    router = std::make_unique<tc::TransportRouter>(routing_settings, catalogue);
-                    router->BuildGraph(catalogue);
-
-                    request_handler = std::make_unique<RequestHandler>(catalogue, *renderer, *router);
-
-                    request.reply(web::http::status_codes::OK, "{\"status\":\"ok\"}", U("application/json"));
-                }
-                catch (const std::exception &e)
-                {
-                    request.reply(web::http::status_codes::BadRequest, e.what());
-                }
-            });
-        }
-    });
-
-    // --- PUT /stop endpoint ---
-    web::http::experimental::listener::http_listener stop_listener(U("http://localhost:8080/stop"));
-    stop_listener.support(web::http::methods::PUT, [&](web::http::http_request request) {
-        request.extract_json().then([&](pplx::task<web::json::value> task) {
+    // --- POST /load ---
+    web::http::experimental::listener::http_listener load_listener(U("http://localhost:8080/load"));
+    load_listener.support(web::http::methods::POST, [&](web::http::http_request req) mutable {
+        req.extract_json().then([req = std::move(req), &catalogue, &renderer, &router, &request_handler,
+                                 &json_reader](pplx::task<web::json::value> task) mutable {
             try
             {
-                if (!json_reader)
-                {
-                    request.reply(web::http::status_codes::BadRequest, "{\"error\":\"catalogue not loaded\"}",
-                                  U("application/json"));
-                    return;
-                }
-
-                web::json::value j = task.get();
+                auto j = task.get();
                 std::stringstream ss;
                 ss << j.serialize();
 
-                json::Document doc = json::Load(ss);
-                const auto &base_requests = doc.GetRoot().AsDict().at("base_requests").AsArray();
+                json_reader = std::make_unique<json_reader::JsonReader>(ss);
+                json_reader->FillTransportCatalogue(catalogue);
 
-                for (const auto &req : base_requests)
-                {
-                    json_reader->ParseRequest(req);
-                }
+                renderer::RenderSettings render_settings =
+                    json_reader->FillRenderSettings(json_reader->GetRenderSettings());
+                renderer = std::make_unique<renderer::MapRenderer>(render_settings);
 
-                json_reader->ApplyCommands(catalogue);
+                tc::RoutingSettings routing_settings =
+                    json_reader->FillRoutingSettings(json_reader->GetRoutingSettings());
+                router = std::make_unique<tc::TransportRouter>(routing_settings, catalogue);
+                router->BuildGraph(catalogue);
 
-                request.reply(web::http::status_codes::OK, "{\"status\":\"stop added\"}", U("application/json"));
+                request_handler = std::make_unique<RequestHandler>(catalogue, *renderer, *router);
+
+                req.reply(web::http::status_codes::OK, "{\"status\":\"ok\"}", U("application/json"));
             }
-
             catch (const std::exception &e)
             {
-                request.reply(web::http::status_codes::InternalError, e.what());
+                req.reply(web::http::status_codes::BadRequest, e.what());
             }
         });
     });
 
-    // --- PATCH /bus endpoint ---
-    web::http::experimental::listener::http_listener patch_listener(U("http://localhost:8080/bus"));
-    patch_listener.support(web::http::methods::PATCH, [&](web::http::http_request request) {
-        request.extract_json().then([&](pplx::task<web::json::value> task) {
-            try
-            {
-                if (!json_reader)
+    // --- PUT /stop ---
+    web::http::experimental::listener::http_listener stop_listener(U("http://localhost:8080/stop"));
+    stop_listener.support(web::http::methods::PUT, [&](web::http::http_request req) mutable {
+        req.extract_json().then(
+            [req = std::move(req), &catalogue, &json_reader](pplx::task<web::json::value> task) mutable {
+                try
                 {
-                    request.reply(web::http::status_codes::BadRequest, "{\"error\":\"catalogue not loaded\"}",
-                                  U("application/json"));
-                    return;
-                }
-
-                web::json::value result = task.get();
-                std::stringstream ss;
-                ss << result.serialize();
-
-                json::Document doc = json::Load(ss);
-                const auto &base_requests = doc.GetRoot().AsDict().at("base_requests").AsArray();
-
-                for (const auto &req : base_requests)
-                {
-                    const auto &request_dict = req.AsDict();
-                    const auto bus_name = request_dict.at("name").AsString();
-                    auto bus = catalogue.GetBus(bus_name);
-
-                    if (!bus)
+                    if (!json_reader)
                     {
-                        request.reply(web::http::status_codes::NotFound, "{\"error\":\"bus not found\"}",
-                                      U("application/json"));
+                        req.reply(web::http::status_codes::BadRequest, "{\"error\":\"catalogue not loaded\"}",
+                                  U("application/json"));
                         return;
                     }
-
-                    if (request_dict.count("stops"))
-                    {
-                        size_t pos = 0;
-
-                        if (request_dict.count("position"))
-                        {
-                            pos = static_cast<size_t>(request_dict.at("position").AsInt());
-                        }
-
-                        const auto &stops = request_dict.at("stops").AsArray();
-
-                        for (size_t i = 0; i < stops.size(); i++)
-                        {
-                            catalogue.UpdateBusStops(bus_name, stops[i].AsString(), pos + i);
-                        }
-                    }
-
-                    if (request_dict.count("is_roundtrip"))
-                    {
-                        bus->is_roundtrip = request_dict.at("is_roundtrip").AsBool();
-                    }
+                    auto j = task.get();
+                    std::stringstream ss;
+                    ss << j.serialize();
+                    json::Document doc = json::Load(ss);
+                    const auto &base_requests = doc.GetRoot().AsDict().at("base_requests").AsArray();
+                    for (const auto &r : base_requests)
+                        json_reader->ParseRequest(r);
+                    json_reader->ApplyCommands(catalogue);
+                    req.reply(web::http::status_codes::OK, "{\"status\":\"stop added\"}", U("application/json"));
                 }
-
-                request.reply(web::http::status_codes::OK, "{\"status\":\"bus updated\"}", U("application/json"));
-            }
-
-            catch (const std::exception &e)
-            {
-                request.reply(web::http::status_codes::InternalError, e.what());
-            }
-        });
+                catch (const std::exception &e)
+                {
+                    req.reply(web::http::status_codes::InternalError, e.what());
+                }
+            });
     });
 
-    // --- Query endpoint ---
-    web::http::experimental::listener::http_listener query_listener(U("http://localhost:8080/query"));
-    query_listener.support(web::http::methods::POST, [&](web::http::http_request request) {
-        request.extract_json().then([&](pplx::task<web::json::value> task) {
+    // --- PATCH /bus ---
+    web::http::experimental::listener::http_listener patch_listener(U("http://localhost:8080/bus"));
+    patch_listener.support(web::http::methods::PATCH, [&](web::http::http_request req) mutable {
+        req.extract_json().then([req = std::move(req), &catalogue](pplx::task<web::json::value> task) mutable {
             try
             {
-                if (!request_handler)
+                auto j = task.get();
+                std::stringstream ss;
+                ss << j.serialize();
+                json::Document doc = json::Load(ss);
+                const auto &base_requests = doc.GetRoot().AsDict().at("base_requests").AsArray();
+                for (const auto &r : base_requests)
+                {
+                    const auto &dict = r.AsDict();
+                    auto bus_name = dict.at("name").AsString();
+                    auto bus = catalogue.GetBus(bus_name);
+                    if (!bus)
+                    {
+                        req.reply(web::http::status_codes::NotFound, "{\"error\":\"bus not found\"}",
+                                  U("application/json"));
+                        return;
+                    }
+                    if (dict.count("stops"))
+                    {
+                        size_t pos = dict.count("position") ? static_cast<size_t>(dict.at("position").AsInt()) : 0;
+                        const auto &stops = dict.at("stops").AsArray();
+                        for (size_t i = 0; i < stops.size(); ++i)
+                            catalogue.UpdateBusStops(bus_name, stops[i].AsString(), pos + i);
+                    }
+                    if (dict.count("is_roundtrip"))
+                        bus->is_roundtrip = dict.at("is_roundtrip").AsBool();
+                }
+                req.reply(web::http::status_codes::OK, "{\"status\":\"bus updated\"}", U("application/json"));
+            }
+            catch (const std::exception &e)
+            {
+                req.reply(web::http::status_codes::InternalError, e.what());
+            }
+        });
+    });
+
+    // --- POST /query ---
+    web::http::experimental::listener::http_listener query_listener(U("http://localhost:8080/query"));
+    query_listener.support(web::http::methods::POST, [&](web::http::http_request request) mutable {
+        request.extract_json().then([request = std::move(request), &catalogue, &json_reader,
+                                 &request_handler](pplx::task<web::json::value> task) mutable {
+            try
+            {
+                if (!request_handler || !json_reader)
                 {
                     request.reply(web::http::status_codes::BadRequest, "{\"error\":\"catalogue not loaded\"}",
-                                  U("application/json"));
+                              U("application/json"));
                     return;
                 }
+                auto j = task.get();
 
-                web::json::value result = task.get();
-                std::stringstream ss;
-                ss << result.serialize();
-
-                std::istringstream input(ss.str());
                 std::ostringstream output;
-
-                json_reader::JsonReader doc(input);
-                doc.ProcessRequests(doc.GetStatRequests(), catalogue, *request_handler, output);
-
+                json_reader->ProcessRequests(json_reader->GetStatRequests(), catalogue, *request_handler, output);
                 request.reply(web::http::status_codes::OK, output.str(), U("application/json"));
             }
-
             catch (const std::exception &e)
             {
                 request.reply(web::http::status_codes::InternalError, e.what());
@@ -188,15 +144,15 @@ int main()
         });
     });
 
-    // --- Map endpoint ---
+    // --- GET /map ---
     web::http::experimental::listener::http_listener map_listener(U("http://localhost:8080/map"));
-    map_listener.support(web::http::methods::GET, [&](web::http::http_request request) {
+    map_listener.support(web::http::methods::GET, [&](web::http::http_request request) mutable {
         try
         {
             if (!renderer || !json_reader)
             {
                 request.reply(web::http::status_codes::BadRequest, "{\"error\":\"catalogue not loaded\"}",
-                              U("application/json"));
+                          U("application/json"));
                 return;
             }
 
@@ -212,18 +168,17 @@ int main()
         }
     });
 
+    // --- Open listeners ---
     try
     {
-        listener.open().wait();
-        query_listener.open().wait();
-        map_listener.open().wait();
+        load_listener.open().wait();
         stop_listener.open().wait();
         patch_listener.open().wait();
-
+        query_listener.open().wait();
+        map_listener.open().wait();
         std::cout << "Server running at http://localhost:8080\n";
-
-        std::string line;
-        std::getline(std::cin, line);
+        std::string dummy;
+        std::getline(std::cin, dummy); // wait until Enter
     }
     catch (const std::exception &e)
     {
