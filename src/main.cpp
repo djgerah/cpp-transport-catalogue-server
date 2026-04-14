@@ -1,24 +1,14 @@
-#include "../include/http/server_data.h"
+#include "../include/http/transport_server.h"
 #include <iostream>
 
 int main()
 {
-    ServerData data;
-    Listeners listeners;
-
-    PatchBus(listeners, data);
-    PostLoad(listeners, data);
-    GetMap(listeners, data);
-    PostQuery(listeners, data);
-    PutStop(listeners, data);
+    ts::TransportServer server;
+    server.Start();
 
     try
     {
-        listeners.load_listener.open().wait();
-        listeners.stop_listener.open().wait();
-        listeners.bus_listener.open().wait();
-        listeners.query_listener.open().wait();
-        listeners.map_listener.open().wait();
+        server.OpenListeners();
         std::cout << "Server running at http://localhost:8080\n";
         std::string dummy;
         std::getline(std::cin, dummy);
