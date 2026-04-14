@@ -1,4 +1,4 @@
-#include "../include/svg.h"
+#include "../../include/svg.h"
 
 using namespace std::literals;
 
@@ -27,7 +27,7 @@ void RenderColor(std::ostream &out, Rgba rgba)
     out << "rgba("sv << static_cast<int>(rgba.red) << ',' << static_cast<int>(rgba.green) << ','
         << static_cast<int>(rgba.blue) << ',' << rgba.opacity << ')';
 }
-} // end namespace
+} // namespace
 
 std::ostream &operator<<(std::ostream &out, const Color &color)
 {
@@ -269,5 +269,5 @@ void HtmlEncodeString(std::ostream &out, std::string_view sv)
         }
     }
 }
-} // end namespace detail
-} // end namespace svg
+} // namespace detail
+} // namespace svg

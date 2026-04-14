@@ -1,4 +1,4 @@
-#include "../include/geo.h"
+#include "../../include/geo.h"
 #include <cmath>
 
 namespace geo

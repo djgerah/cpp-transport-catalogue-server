@@ -1,6 +1,6 @@
 #include <stdexcept>
 
-#include "../include/transport_catalogue.h"
+#include "../../include/transport_catalogue.h"
 
 namespace tc
 {

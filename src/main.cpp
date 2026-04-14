@@ -12,7 +12,6 @@ int main()
     PostQuery(listeners, data);
     PutStop(listeners, data);
 
-    // --- Open listeners ---
     try
     {
         listeners.load_listener.open().wait();
