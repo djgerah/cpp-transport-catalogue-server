@@ -42,7 +42,7 @@ Content-Type: application/json
   "base_requests": [
     {
       "type": "Bus",
-      "name": "37",
+      "name": "77",
       "stops": [
         "Остановка №1",
         "Остановка №2",
@@ -213,7 +213,7 @@ Content-Type: application/json
   "base_requests": [
     {
       "type": "Bus",
-      "name": "38",
+      "name": "48",
       "stops": [
         "Остановка №1",
         "Остановка №2",
@@ -235,7 +235,7 @@ Content-Type: application/json
   "base_requests": [
     {
       "type": "Bus",
-      "name": "37",
+      "name": "77",
       "stops": [
         "Остановка №15"
       ],
@@ -256,7 +256,7 @@ Content-Type: application/json
   "delete_requests": [
     {
       "type": "Bus",
-      "name": "37",
+      "name": "77",
       "operation": "delete",
       "stops": ["Остановка №15"]
     }
@@ -274,7 +274,7 @@ Content-Type: application/json
   "stat_requests": [
     {
       "id": 1,
-      "name": "37",
+      "name": "77",
       "type": "Bus"
     }
   ]
