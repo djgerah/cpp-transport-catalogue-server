@@ -17,7 +17,9 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
 $(TARGET): $(OBJS)
 	$(CXX) $(CXXFLAGS) $^ -lcpprest -lboost_system -lssl -lcrypto -o $@
 
-all: $(TARGET)
+all: build
+
+build: $(TARGET)
 
 run: all
 	./$(TARGET)
