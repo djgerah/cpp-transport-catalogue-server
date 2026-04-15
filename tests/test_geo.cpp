@@ -1,5 +1,5 @@
-#include <gtest/gtest.h>
 #include "../include/geo.h"
+#include <gtest/gtest.h>
 
 using namespace geo;
 
@@ -78,6 +78,6 @@ TEST(ComputeDistanceTest, Symmetry)
     // Проверка симметричности: A→B == B→A
     double from_start = ComputeDistance({55.690431, 38.113266}, {55.682256, 38.116579});
     double from_finish = ComputeDistance({55.682256, 38.116579}, {55.690431, 38.113266});
-    
+
     EXPECT_DOUBLE_EQ(from_start, from_finish);
 }
