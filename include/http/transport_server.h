@@ -19,9 +19,9 @@ class TransportServer
     struct Listeners
     {
         Listeners()
-            : bus_listener(U("http://localhost:8080/bus")), load_listener(U("http://localhost:8080/load")),
-              map_listener(U("http://localhost:8080/map")), query_listener(U("http://localhost:8080/query")),
-              stop_listener(U("http://localhost:8080/stop")), catalogue_listener(U("http://localhost:8080/catalogue"))
+            : bus_listener(U("http://0.0.0.0:8080/bus")), load_listener(U("http://0.0.0.0:8080/load")),
+              map_listener(U("http://0.0.0.0:8080/map")), query_listener(U("http://0.0.0.0:8080/query")),
+              stop_listener(U("http://0.0.0.0:8080/stop")), catalogue_listener(U("http://0.0.0.0:8080/catalogue"))
         {
         }
 

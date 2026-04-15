@@ -22,7 +22,7 @@ void ts::TransportServer::OpenListeners()
     listeners_.map_listener.open().wait();
     listeners_.catalogue_listener.open().wait();
 
-    std::cout << "Server running at http://localhost:8080\n";
+    std::cout << "Server running at http://0.0.0.0:8080\n";
 }
 
 void ts::TransportServer::PostLoad()

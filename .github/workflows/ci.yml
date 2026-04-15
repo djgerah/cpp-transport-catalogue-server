@@ -1,11 +1,11 @@
-name: C++ CI
+name: CI
 
 on:
   push:
   pull_request:
 
 jobs:
-  build:
+  build-test:
     runs-on: ubuntu-latest
 
     steps:
@@ -15,22 +15,23 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            g++ make \
+            g++ make cmake \
             libcpprest-dev \
             libboost-system-dev \
             libssl-dev \
+            libgtest-dev \
             clang-format
 
-      - name: Build
+      - name: Build project
         run: make build
 
-      - name: Check formatting
+      - name: Build tests
+        run: make tests
+
+      - name: Run tests
+        run: ./build/tests
+
+      - name: Clang-Format check
         run: |
           make clang-format
           git diff --exit-code
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: transport_catalogue
-          path: build/transport_catalogue
