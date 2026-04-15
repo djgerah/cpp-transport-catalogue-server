@@ -25,13 +25,10 @@ jobs:
       - name: Build project
         run: make build
 
-      - name: Build
-        run: make build
-
       - name: Run tests
         run: make test
 
-      - name: Clang-Format check
+      - name: Check formatting
         run: |
           make clang-format
           git diff --exit-code
