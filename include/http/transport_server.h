@@ -21,7 +21,7 @@ class TransportServer
         Listeners()
             : bus_listener(U("http://localhost:8080/bus")), load_listener(U("http://localhost:8080/load")),
               map_listener(U("http://localhost:8080/map")), query_listener(U("http://localhost:8080/query")),
-              stop_listener(U("http://localhost:8080/stop"))
+              stop_listener(U("http://localhost:8080/stop")), catalogue_listener(U("http://localhost:8080/catalogue"))
         {
         }
 
@@ -30,6 +30,7 @@ class TransportServer
         web::http::experimental::listener::http_listener map_listener;
         web::http::experimental::listener::http_listener query_listener;
         web::http::experimental::listener::http_listener stop_listener;
+        web::http::experimental::listener::http_listener catalogue_listener;
     };
 
   public:
@@ -42,6 +43,8 @@ class TransportServer
     void GetMap();
     void PostQuery();
     void PutStop();
+    void DeleteStop();
+    void PatchCatalogue();
 
     ServerData data_;
     Listeners listeners_;

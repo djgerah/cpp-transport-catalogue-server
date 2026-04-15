@@ -9,6 +9,8 @@ void ts::TransportServer::Start()
     GetMap();
     PostQuery();
     PutStop();
+    DeleteStop();
+    PatchCatalogue();
 }
 
 void ts::TransportServer::OpenListeners()
@@ -18,6 +20,7 @@ void ts::TransportServer::OpenListeners()
     listeners_.bus_listener.open().wait();
     listeners_.query_listener.open().wait();
     listeners_.map_listener.open().wait();
+    listeners_.catalogue_listener.open().wait();
 
     std::cout << "Server running at http://localhost:8080\n";
 }
@@ -203,6 +206,75 @@ void ts::TransportServer::PutStop()
     });
 }
 
+void ts::TransportServer::PatchCatalogue()
+{
+    listeners_.catalogue_listener.support(web::http::methods::PATCH, [&](web::http::http_request request) mutable {
+        ts::TransportLogger::LogRequest(request);
+        auto timer = std::make_shared<ts::RequestTimer>();
+
+        request.extract_json().then([request = std::move(request), this,
+                                     timer](pplx::task<web::json::value> task) mutable {
+            try
+            {
+                if (!data_.json_reader)
+                {
+                    request.reply(web::http::status_codes::BadRequest, "{\"error\":\"catalogue not loaded\"}",
+                                  U("application/json"));
+                    timer->SetStatus(400);
+
+                    return;
+                }
+
+                auto value = task.get();
+                std::stringstream stream;
+                stream << value.serialize();
+
+                std::istringstream input(stream.str());
+                json::Document doc = json::Load(input);
+
+                const auto &delete_requests = doc.GetRoot().AsDict().at("delete_requests").AsArray();
+
+                for (const auto &r : delete_requests)
+                {
+                    const auto &dict = r.AsDict();
+
+                    if (dict.at("operation").AsString() == "delete")
+                    {
+                        const auto &stops = dict.at("stops").AsArray();
+
+                        for (const auto &stop_node : stops)
+                        {
+                            std::string stop_name = stop_node.AsString();
+
+                            if (!data_.catalogue.GetStop(stop_name))
+                            {
+                                request.reply(web::http::status_codes::NotFound, "{\"error\":\"stop not found\"}",
+                                              U("application/json"));
+                                timer->SetStatus(404);
+                                return;
+                            }
+
+                            data_.catalogue.DeleteStopFromCatalogue(stop_name);
+                        }
+                    }
+                }
+
+                data_.router->BuildGraph(data_.catalogue);
+
+                request.reply(web::http::status_codes::OK, "{\"status\":\"catalogue updated\"}", U("application/json"));
+
+                timer->SetStatus(200);
+            }
+            catch (const std::exception &e)
+            {
+                ts::TransportLogger::LogError(e.what());
+                request.reply(web::http::status_codes::InternalError, e.what());
+                timer->SetStatus(500);
+            }
+        });
+    });
+}
+
 void ts::TransportServer::PatchBus()
 {
     listeners_.bus_listener.support(web::http::methods::PATCH, [&](web::http::http_request request) mutable {
@@ -213,6 +285,14 @@ void ts::TransportServer::PatchBus()
             [request = std::move(request), this, timer](pplx::task<web::json::value> task) mutable {
                 try
                 {
+                    if (!data_.json_reader)
+                    {
+                        request.reply(web::http::status_codes::BadRequest, "{\"error\":\"catalogue not loaded\"}",
+                                      U("application/json"));
+                        timer->SetStatus(400);
+                        return;
+                    }
+
                     auto value = task.get();
                     std::stringstream stream;
                     stream << value.serialize();
@@ -234,7 +314,7 @@ void ts::TransportServer::PatchBus()
                             request.reply(web::http::status_codes::NotFound, "{\"error\":\"bus not found\"}",
                                           U("application/json"));
 
-                            timer->SetStatus(400);
+                            timer->SetStatus(404);
 
                             return;
                         }
@@ -246,7 +326,7 @@ void ts::TransportServer::PatchBus()
 
                             for (size_t i = 0; i < stops.size(); ++i)
                             {
-                                data_.catalogue.UpdateBusStops(bus_name, stops[i].AsString(), pos + i);
+                                data_.catalogue.InsertBusStop(bus_name, stops[i].AsString(), pos + i);
                             }
                         }
 
@@ -266,6 +346,85 @@ void ts::TransportServer::PatchBus()
 
                     request.reply(web::http::status_codes::InternalError, e.what());
 
+                    timer->SetStatus(500);
+                }
+            });
+    });
+}
+
+void ts::TransportServer::DeleteStop()
+{
+    listeners_.stop_listener.support(web::http::methods::DEL, [&](web::http::http_request request) mutable {
+        ts::TransportLogger::LogRequest(request);
+        auto timer = std::make_shared<ts::RequestTimer>();
+
+        request.extract_json().then(
+            [request = std::move(request), this, timer](pplx::task<web::json::value> task) mutable {
+                try
+                {
+                    if (!data_.json_reader)
+                    {
+                        request.reply(web::http::status_codes::BadRequest, "{\"error\":\"catalogue not loaded\"}",
+                                      U("application/json"));
+                        timer->SetStatus(400);
+
+                        return;
+                    }
+
+                    auto value = task.get();
+                    std::stringstream stream;
+                    stream << value.serialize();
+
+                    std::istringstream input(stream.str());
+                    json::Document doc = json::Load(input);
+
+                    const auto &delete_requests = doc.GetRoot().AsDict().at("delete_requests").AsArray();
+
+                    for (const auto &r : delete_requests)
+                    {
+                        const auto &dict = r.AsDict();
+                        std::string bus_name = dict.at("name").AsString();
+
+                        if (!data_.catalogue.GetBus(bus_name))
+                        {
+                            request.reply(web::http::status_codes::NotFound, "{\"error\":\"bus not found\"}",
+                                          U("application/json"));
+                            timer->SetStatus(404);
+
+                            return;
+                        }
+
+                        if (dict.at("operation").AsString() == "delete")
+                        {
+                            const auto &stops = dict.at("stops").AsArray();
+
+                            for (const auto &stop_node : stops)
+                            {
+                                std::string stop_name = stop_node.AsString();
+
+                                if (!data_.catalogue.GetStop(stop_name))
+                                {
+                                    request.reply(web::http::status_codes::NotFound, "{\"error\":\"stop not found\"}",
+                                                  U("application/json"));
+                                    timer->SetStatus(404);
+
+                                    return;
+                                }
+
+                                data_.catalogue.DeleteStopFromBus(bus_name, stop_name);
+                            }
+                        }
+                    }
+                    data_.router->BuildGraph(data_.catalogue);
+
+                    request.reply(web::http::status_codes::OK, "{\"status\":\"stop deleted\"}", U("application/json"));
+
+                    timer->SetStatus(200);
+                }
+                catch (const std::exception &e)
+                {
+                    ts::TransportLogger::LogError(e.what());
+                    request.reply(web::http::status_codes::InternalError, e.what());
                     timer->SetStatus(500);
                 }
             });

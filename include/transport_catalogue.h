@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <deque>
 #include <map>
+#include <memory>
 #include <optional>
 #include <set>
 #include <string>
@@ -40,14 +41,16 @@ class TransportCatalogue
     using StopMap = std::unordered_map<std::string_view, const Stop *>;
     using BusMap = std::unordered_map<std::string_view, Bus *>;
     using HashedStops = std::unordered_set<const Stop *, Hasher>;
-    using HashedDistanceBtwStops = std::unordered_map<std::pair<const Stop *, const Stop *>, int, Hasher>;
+    using HashedDistance = std::unordered_map<std::pair<const Stop *, const Stop *>, int, Hasher>;
 
   public:
     void AddStop(tc::Stop stop);
     const Stop *GetStop(std::string_view stop_name) const;
+    void DeleteStopFromCatalogue(std::string_view stop_name);
     void AddBus(tc::Bus bus);
     Bus *GetBus(std::string_view bus_name) const;
-    void UpdateBusStops(std::string_view bus_name, std::string_view stop_name, size_t pos);
+    void InsertBusStop(std::string_view bus_name, std::string_view stop_name, size_t pos);
+    void DeleteStopFromBus(std::string_view bus_name, std::string_view stop_name);
     std::unordered_set<const Stop *, Hasher> GetUniqueStops(std::string_view bus_number) const;
     const std::map<std::string_view, const Stop *> GetAllStops() const;
     const std::map<std::string_view, const Bus *> GetAllBuses() const;
@@ -57,10 +60,13 @@ class TransportCatalogue
     std::optional<tc::BusStat> GetBusStat(const std::string_view bus_number) const;
 
   private:
-    std::deque<Stop> stops_;
+    void EraseStop(const Stop *stop);
+    void EraseDistance(const Stop *stop);
+
+    std::deque<std::unique_ptr<Stop>> stops_;
     StopMap stopname_to_stop_;
     std::deque<Bus> buses_;
     BusMap busname_to_bus_;
-    HashedDistanceBtwStops dist_btw_stops;
+    HashedDistance distance_;
 };
 } // namespace tc

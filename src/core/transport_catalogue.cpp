@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <stdexcept>
 
 #include "../../include/transport_catalogue.h"
@@ -6,8 +7,8 @@ namespace tc
 {
 void TransportCatalogue::AddStop(tc::Stop stop)
 {
-    stops_.push_back(stop);
-    stopname_to_stop_[stops_.back().name] = &stops_.back();
+    stops_.push_back(std::make_unique<Stop>(std::move(stop)));
+    stopname_to_stop_[stops_.back()->name] = stops_.back().get();
 }
 
 const Stop *TransportCatalogue::GetStop(std::string_view stop_name) const
@@ -23,6 +24,61 @@ const Stop *TransportCatalogue::GetStop(std::string_view stop_name) const
     }
 }
 
+void TransportCatalogue::EraseStop(const Stop *stop)
+{
+    for (auto it = stops_.begin(); it != stops_.end();)
+    {
+        if (it->get() == stop)
+        {
+            it = stops_.erase(it);
+        }
+
+        else
+        {
+            ++it;
+        }
+    }
+}
+
+void TransportCatalogue::EraseDistance(const Stop *stop)
+{
+    for (auto it = distance_.begin(); it != distance_.end();)
+    {
+        if (it->first.first == stop || it->first.second == stop)
+        {
+            it = distance_.erase(it);
+        }
+        else
+        {
+            ++it;
+        }
+    }
+}
+
+void TransportCatalogue::DeleteStopFromCatalogue(std::string_view stop_name)
+{
+    auto it = stopname_to_stop_.find(stop_name);
+
+    if (it == stopname_to_stop_.end())
+    {
+        return;
+    }
+
+    const Stop *stop = it->second;
+
+    for (auto &bus : buses_)
+    {
+        auto &stops = bus.stops;
+
+        stops.erase(std::remove(stops.begin(), stops.end(), stop), stops.end());
+    }
+
+    stopname_to_stop_.erase(it);
+
+    EraseDistance(stop);
+    EraseStop(stop);
+}
+
 void TransportCatalogue::AddBus(tc::Bus bus)
 {
     buses_.push_back(bus);
@@ -32,15 +88,15 @@ void TransportCatalogue::AddBus(tc::Bus bus)
     {
         for (auto &stop : stops_)
         {
-            if (stop.name == bus_stop->name)
+            if (stop->name == bus_stop->name)
             {
-                stop.buses.insert(bus.number);
+                stop->buses.insert(bus.number);
             }
         }
     }
 }
 
-void TransportCatalogue::UpdateBusStops(std::string_view bus_name, std::string_view stop_name, size_t pos)
+void TransportCatalogue::InsertBusStop(std::string_view bus_name, std::string_view stop_name, size_t pos)
 {
     auto bus = GetBus(bus_name);
 
@@ -58,6 +114,27 @@ void TransportCatalogue::UpdateBusStops(std::string_view bus_name, std::string_v
     {
         bus->stops.insert(bus->stops.begin() + pos, stop);
     }
+}
+
+void TransportCatalogue::DeleteStopFromBus(std::string_view bus_name, std::string_view stop_name)
+{
+    auto bus = GetBus(bus_name);
+
+    if (!bus)
+        return;
+
+    auto it = stopname_to_stop_.find(stop_name);
+
+    if (it == stopname_to_stop_.end())
+    {
+        return;
+    }
+
+    auto stop = it->second;
+
+    auto &stops = bus->stops;
+
+    stops.erase(std::remove(stops.begin(), stops.end(), stop), stops.end());
 }
 
 Bus *TransportCatalogue::GetBus(std::string_view bus_name) const
@@ -114,19 +191,19 @@ const std::map<std::string_view, const Bus *> TransportCatalogue::GetAllBuses() 
 
 void TransportCatalogue::SetDistance(const Stop *from, const Stop *to, const int distance)
 {
-    dist_btw_stops[{from, to}] = distance;
+    distance_[{from, to}] = distance;
 }
 
 int TransportCatalogue::GetDistance(const Stop *from, const Stop *to) const
 {
-    if (dist_btw_stops.count({from, to}))
+    if (distance_.count({from, to}))
     {
-        return dist_btw_stops.at({from, to});
+        return distance_.at({from, to});
     }
 
-    else if (dist_btw_stops.count({to, from}))
+    else if (distance_.count({to, from}))
     {
-        return dist_btw_stops.at({to, from});
+        return distance_.at({to, from});
     }
 
     else
