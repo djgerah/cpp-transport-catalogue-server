@@ -9,7 +9,7 @@ int main()
     try
     {
         server.OpenListeners();
-        std::cout << "Server running at http://localhost:8080\n";
+        std::cout << "Press enter to stop." << std::endl;
         std::string dummy;
         std::getline(std::cin, dummy);
     }
